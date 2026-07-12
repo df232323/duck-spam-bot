@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher
-from aiogram.filters import Command
 from config import BOT_TOKEN
 import database
 from handlers import setup_handlers
