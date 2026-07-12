@@ -1,11 +1,9 @@
 import asyncio
 import socket
 import time
-from telethon import TelegramClient
-from config import SESSIONS_DIR
 
 async def test_proxy(proxy_string):
-    """Тестировать прокси на работоспособность (через socket)"""
+    """Тестировать прокси на работоспособность (без aiohttp)"""
     try:
         # Парсим прокси
         if proxy_string.startswith("socks5://"):
@@ -31,7 +29,7 @@ async def test_proxy(proxy_string):
         else:
             return False, "Неизвестный формат прокси"
         
-        # Проверяем через socket с таймаутом
+        # Проверяем через socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(3)
         try:
@@ -44,16 +42,13 @@ async def test_proxy(proxy_string):
     except Exception as e:
         return False, f"Ошибка: {str(e)[:30]}"
 
-
 async def test_proxy_with_ping(proxy_string):
-    """Полная проверка прокси с пингом и рекомендацией (возвращает словарь)"""
+    """Полная проверка прокси с пингом"""
     is_work, msg = await test_proxy(proxy_string)
-    
-    # Измеряем пинг
     ping = 9999
+    
     if is_work:
         try:
-            # Парсим прокси
             if proxy_string.startswith("socks5://"):
                 parts = proxy_string.replace("socks5://", "").split("@")
                 if len(parts) == 2:
@@ -82,7 +77,6 @@ async def test_proxy_with_ping(proxy_string):
         except:
             ping = 9999
     
-    # Определяем статус и рекомендацию
     if not is_work:
         status = "🔴 Прокси НЕ РАБОТАЕТ"
         recommendation = "🔴 Не подходит для рассылки"
@@ -93,11 +87,11 @@ async def test_proxy_with_ping(proxy_string):
         ping_display = f"🔰 PING: {ping} мс"
     elif 100 < ping <= 500:
         status = "🟢 Прокси рабочее"
-        recommendation = "🟠 Работает, но медленно (рекомендуется заменить)"
+        recommendation = "🟠 Работает, но медленно"
         ping_display = f"🔰 PING: {ping} мс"
     else:
         status = "🟢 Прокси рабочее"
-        recommendation = "🔴 Очень медленно, не рекомендуется для рассылки"
+        recommendation = "🔴 Очень медленно"
         ping_display = f"🔰 PING: {ping} мс"
     
     return {
@@ -107,7 +101,6 @@ async def test_proxy_with_ping(proxy_string):
         "is_work": is_work,
         "msg": msg
     }
-
 
 def get_proxy_dict(proxy_string):
     """Получить словарь прокси для telethon"""
