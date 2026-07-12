@@ -1,5 +1,10 @@
+# Сначала обновляем pip
+pip>=26.1.2
+
+# Основные зависимости
 aiogram==2.25.1
 telethon==1.34.0
+aiohttp>=3.9.0
 pysocks==1.7.1
 requests==2.31.0
 Flask==2.3.3
