@@ -1,10 +1,11 @@
 import os
 import asyncio
 import logging
-from aiogram import types, Dispatcher
+from aiogram import types, Dispatcher, F, Bot
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import Command, StateFilter
 import database as db
 from session_manager import load_session_file, check_session
 from proxy_manager import test_proxy, test_proxy_with_ping, get_proxy_dict
@@ -12,16 +13,16 @@ from broadcast_engine import BroadcastEngine
 from config import ADMIN_IDS, SESSIONS_DIR, MEDIA_DIR
 from utils import format_time, format_progress_bar
 
-# Настройка логирования
 logger = logging.getLogger(__name__)
-
 broadcast_engine = BroadcastEngine()
 user_broadcasts = {}  # user_id -> broadcast_id
+
 
 class TemplateStates(StatesGroup):
     waiting_for_text = State()
     waiting_for_link_url = State()
     waiting_for_link_text = State()
+
 
 class AdminStates(StatesGroup):
     waiting_for_user_id = State()
@@ -33,7 +34,7 @@ class AdminStates(StatesGroup):
 def get_main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="📱 Загрузить аккаунты")],
+            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text=" Загрузить аккаунты")],
             [KeyboardButton(text="📝 Шаблон"), KeyboardButton(text="⚙️ Настройки")],
             [KeyboardButton(text="🔐 Админ-панель")]
         ],
@@ -51,7 +52,7 @@ def get_settings_inline():
         [InlineKeyboardButton(text="🗑 Удаление сообщений", callback_data="toggle_delete")],
         [InlineKeyboardButton(text="🔄 Сброс сессий", callback_data="toggle_reset")],
         [InlineKeyboardButton(text="🌐 Выбрать прокси", callback_data="select_proxy")],
-        [InlineKeyboardButton(text="➕ Добавить прокси", callback_data="add_my_proxy")],
+        [InlineKeyboardButton(text=" Добавить прокси", callback_data="add_my_proxy")],
         [InlineKeyboardButton(text="❌ Удалить прокси", callback_data="remove_my_proxy")],
         [InlineKeyboardButton(text="🔍 Проверить прокси", callback_data="test_proxies")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")]
@@ -61,8 +62,8 @@ def get_settings_inline():
 
 def get_accounts_inline(accounts_count=0):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📄 Загрузить .session файл", callback_data="add_session")],
-        [InlineKeyboardButton(text="🔍 Проверить аккаунты", callback_data="check_sessions")],
+        [InlineKeyboardButton(text=" Загрузить .session файл", callback_data="add_session")],
+        [InlineKeyboardButton(text=" Проверить аккаунты", callback_data="check_sessions")],
         [InlineKeyboardButton(text="🗑 Удалить невалидные", callback_data="delete_invalid")],
         [InlineKeyboardButton(text="🗑 Удалить все аккаунты", callback_data="delete_all")],
         [InlineKeyboardButton(text="🚀 Запустить рассылку", callback_data="start_broadcast")],
@@ -92,7 +93,7 @@ def get_template_inline():
 
 def get_admin_inline():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👥 Управление доступом", callback_data="admin_users")],
+        [InlineKeyboardButton(text=" Управление доступом", callback_data="admin_users")],
         [InlineKeyboardButton(text="🌐 Управление прокси", callback_data="admin_proxies")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")]
     ])
@@ -111,6 +112,7 @@ def get_proxy_selection_inline():
     keyboard.inline_keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_settings")])
     return keyboard
 
+
 def get_proxy_delete_inline():
     proxies = db.get_proxies()
     if not proxies:
@@ -122,6 +124,7 @@ def get_proxy_delete_inline():
         ])
     keyboard.inline_keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_settings")])
     return keyboard
+
 
 def get_admin_proxy_delete_inline():
     proxies = db.get_proxies()
@@ -137,9 +140,8 @@ def get_admin_proxy_delete_inline():
 
 
 def setup_handlers(dp: Dispatcher):
-
     # ==================== СТАРТ ====================
-    @dp.message_handler(commands=['start'])
+    @dp.message(Command('start'))
     async def cmd_start(message: types.Message):
         user = message.from_user
         db.create_user(user.id, user.username, user.first_name)
@@ -151,7 +153,7 @@ def setup_handlers(dp: Dispatcher):
         )
 
     # ==================== НАЗАД ====================
-    @dp.callback_query_handler(lambda c: c.data == "back_to_main")
+    @dp.callback_query(F.data == "back_to_main")
     async def back_to_main(callback: types.CallbackQuery):
         await callback.message.delete()
         await callback.message.answer(
@@ -164,7 +166,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "back_settings")
+    @dp.callback_query(F.data == "back_settings")
     async def back_settings(callback: types.CallbackQuery):
         await callback.message.delete()
         await show_settings_callback(callback)
@@ -174,12 +176,11 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== ПРОФИЛЬ ====================
-    @dp.message_handler(lambda m: m.text == "👤 Профиль")
+    @dp.message(F.text == "👤 Профиль")
     async def show_profile(message: types.Message):
         user_id = message.from_user.id
         user = db.get_user(user_id)
         sessions = db.get_sessions(user_id)
-
         proxy_text = "🚫 Не назначен"
         if user and user['proxy_id']:
             proxies = db.get_proxies()
@@ -187,7 +188,6 @@ def setup_handlers(dp: Dispatcher):
                 if p['id'] == user['proxy_id']:
                     proxy_text = f"✅ {p['proxy_string'][:40]}..."
                     break
-
         text = (
             f"👤 **ПРОФИЛЬ**\n\n"
             f"🆔 ID: `{user_id}`\n"
@@ -199,13 +199,13 @@ def setup_handlers(dp: Dispatcher):
         await message.answer(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
     # ==================== АККАУНТЫ ====================
-    @dp.message_handler(lambda m: m.text == "📱 Загрузить аккаунты")
+    @dp.message(F.text == "📱 Загрузить аккаунты")
     async def show_accounts_menu(message: types.Message):
         user_id = message.from_user.id
         sessions = db.get_sessions(user_id)
         logger.info(f"Пользователь {user_id} открыл меню аккаунтов, аккаунтов: {len(sessions)}")
         text = (
-            "📂 **Управление аккаунтами**\n\n"
+            " **Управление аккаунтами**\n\n"
             "_• Загружайте .session файлы (Telethon/Pyrogram)_\n"
             "_• Проверяйте работоспособность аккаунтов_\n"
             "_• Запускайте рассылку одновременно на все аккаунты_\n\n"
@@ -217,7 +217,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_accounts_inline(len(sessions))
         )
 
-    @dp.callback_query_handler(lambda c: c.data == "add_session")
+    @dp.callback_query(F.data == "add_session")
     async def add_session(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил загрузку .session")
         await callback.message.edit_text(
@@ -229,7 +229,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(content_types=['document'])
+    @dp.message(F.document)
     async def handle_document(message: types.Message):
         user_id = message.from_user.id
         doc = message.document
@@ -238,10 +238,8 @@ def setup_handlers(dp: Dispatcher):
 
         # ===== APK И ДРУГИЕ ФАЙЛЫ ДЛЯ ШАБЛОНА =====
         is_template_file = fname.endswith('.apk') or fname.endswith('.jpg') or fname.endswith('.png') or fname.endswith('.mp4')
-        
         if is_template_file:
             template = db.get_template(user_id)
-            
             if template and template['text']:
                 if template['file_path']:
                     old_file = os.path.join(MEDIA_DIR, f"template_{user_id}_{template['file_path']}")
@@ -251,9 +249,8 @@ def setup_handlers(dp: Dispatcher):
                             logger.info(f"Удалён старый файл шаблона: {old_file}")
                         except Exception as e:
                             logger.warning(f"Не удалось удалить старый файл: {e}")
-                
                 file_path = os.path.join(MEDIA_DIR, f"template_{user_id}_{doc.file_name}")
-                await message.bot.download(doc, file_path)
+                await doc.download(destination=file_path)
                 db.save_template(user_id, text=template['text'], file_path=doc.file_name)
                 await message.answer(
                     f"✅ **Файл добавлен в шаблон!**\n\n📁 {doc.file_name}",
@@ -272,7 +269,7 @@ def setup_handlers(dp: Dispatcher):
         # ===== ОБРАБОТКА .SESSION ФАЙЛОВ =====
         if fname.endswith('.session'):
             file_path = os.path.join(MEDIA_DIR, f"temp_{user_id}_{doc.file_name}")
-            await message.bot.download(doc, file_path)
+            await doc.download(destination=file_path)
             result = await load_session_file(user_id, file_path)
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -297,41 +294,32 @@ def setup_handlers(dp: Dispatcher):
         if fname.endswith('.zip'):
             import zipfile
             import shutil
-            
             file_path = os.path.join(MEDIA_DIR, f"temp_{user_id}_{doc.file_name}")
-            await message.bot.download(doc, file_path)
+            await doc.download(destination=file_path)
             await message.answer("⏳ _Обработка архива..._", parse_mode="Markdown", reply_markup=get_main_keyboard())
-
             temp_dir = os.path.join(MEDIA_DIR, f"session_temp_{user_id}")
             os.makedirs(temp_dir, exist_ok=True)
-            
             try:
                 with zipfile.ZipFile(file_path, 'r') as zf:
                     zf.extractall(temp_dir)
-                
                 results = []
                 for f in os.listdir(temp_dir):
                     if f.endswith('.session'):
                         session_path = os.path.join(temp_dir, f)
                         result = await load_session_file(user_id, session_path)
                         results.append(result)
-                
                 shutil.rmtree(temp_dir)
-                
                 success = [r for r in results if r['status'] == 'success']
                 errors = [r for r in results if r['status'] == 'error']
-                
                 logger.info(f"Загружено {len(success)} сессий из ZIP, ошибок: {len(errors)}")
-                text = f"📄 **Результат загрузки .session:**\n\n✅ _Успешно:_ {len(success)}\n❌ _Ошибок:_ {len(errors)}"
+                text = f"📄 **Результат загрузки .session:**\n\n✅ _Успешно:_ {len(success)}\n _Ошибок:_ {len(errors)}"
                 await message.answer(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
                 await show_accounts_menu(message)
-                
             except Exception as e:
                 logger.error(f"Ошибка распаковки ZIP: {e}")
                 await message.answer(f"❌ _Ошибка распаковки: {str(e)[:100]}_", parse_mode="Markdown", reply_markup=get_main_keyboard())
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir)
-            
             if os.path.exists(file_path):
                 os.remove(file_path)
             return
@@ -339,24 +327,22 @@ def setup_handlers(dp: Dispatcher):
         await message.answer("❌ _Неподдерживаемый формат_", parse_mode="Markdown", reply_markup=get_main_keyboard())
 
     # ==================== ПРОВЕРКА АККАУНТОВ ====================
-    @dp.callback_query_handler(lambda c: c.data == "check_sessions")
+    @dp.callback_query(F.data == "check_sessions")
     async def check_sessions(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         logger.info(f"Пользователь {user_id} начал проверку аккаунтов")
         sessions = db.get_sessions(user_id)
         if not sessions:
-            await callback.message.edit_text("❌ _Нет аккаунтов для проверки_", parse_mode="Markdown")
+            await callback.message.edit_text(" _Нет аккаунтов для проверки_", parse_mode="Markdown")
             try:
                 await callback.answer()
             except:
                 pass
             return
-
         await callback.message.edit_text(
-            "🔍 **Проверка аккаунтов...**\n\n_⏳ Пожалуйста, подождите..._",
+            " **Проверка аккаунтов...**\n\n_⏳ Пожалуйста, подождите..._",
             parse_mode="Markdown"
         )
-
         user = db.get_user(user_id)
         proxy_dict = None
         if user and user['proxy_id']:
@@ -365,17 +351,14 @@ def setup_handlers(dp: Dispatcher):
                 if p['id'] == user['proxy_id']:
                     proxy_dict = get_proxy_dict(p['proxy_string'])
                     break
-
         results = []
         for session in sessions:
             is_valid, msg = await check_session(session['id'], user_id, proxy_dict)
             results.append({"session": session, "valid": is_valid, "msg": msg})
             logger.info(f"Аккаунт {session['username']}: валидность {is_valid}")
-
         text = "🔍 Результат проверки:\n\n"
         valid = [r for r in results if r['valid']]
         invalid = [r for r in results if not r['valid']]
-        
         for r in valid[:10]:
             username = r['session']['username'] if r['session']['username'] else r['session']['phone']
             total = r['session']['total_contacts'] if r['session']['total_contacts'] else 0
@@ -384,12 +367,11 @@ def setup_handlers(dp: Dispatcher):
         for r in invalid[:10]:
             username = r['session']['username'] if r['session']['username'] else r['session']['phone']
             text += f"❌ @{username} | ошибка: {r['msg']}\n"
-        text += f"\n\n✅ Работают: {len(valid)}\n❌ Не работают: {len(invalid)}"
-        
+        text += f"\n\n✅ Работают: {len(valid)}\n Не работают: {len(invalid)}"
         await callback.message.edit_text(text, reply_markup=get_accounts_inline(len(sessions)))
 
     # ==================== УДАЛЕНИЕ ====================
-    @dp.callback_query_handler(lambda c: c.data == "delete_invalid")
+    @dp.callback_query(F.data == "delete_invalid")
     async def delete_invalid(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         sessions = db.get_sessions(user_id)
@@ -411,13 +393,13 @@ def setup_handlers(dp: Dispatcher):
             db.delete_session(session['id'])
         sessions = db.get_sessions(user_id)
         logger.info(f"Пользователь {user_id} удалил {len(invalid)} невалидных аккаунтов")
-        await callback.message.edit_text(f"🗑 _Удалено {len(invalid)} невалидных аккаунтов_", parse_mode="Markdown", reply_markup=get_accounts_inline(len(sessions)))
+        await callback.message.edit_text(f" _Удалено {len(invalid)} невалидных аккаунтов_", parse_mode="Markdown", reply_markup=get_accounts_inline(len(sessions)))
         try:
             await callback.answer()
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "delete_all")
+    @dp.callback_query(F.data == "delete_all")
     async def delete_all_sessions(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         sessions = db.get_sessions(user_id)
@@ -450,7 +432,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== СПИСОК АККАУНТОВ ====================
-    @dp.callback_query_handler(lambda c: c.data == "list_sessions")
+    @dp.callback_query(F.data == "list_sessions")
     async def list_sessions(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         sessions = db.get_sessions(user_id)
@@ -475,11 +457,10 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== РАССЫЛКА ====================
-    @dp.callback_query_handler(lambda c: c.data == "start_broadcast")
+    @dp.callback_query(F.data == "start_broadcast")
     async def start_broadcast(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         logger.info(f"Пользователь {user_id} запускает рассылку")
-        
         sessions = db.get_valid_sessions(user_id)
         if not sessions:
             await callback.message.edit_text("❌ _Нет валидных аккаунтов для рассылки_", parse_mode="Markdown", reply_markup=get_accounts_inline(0))
@@ -488,7 +469,6 @@ def setup_handlers(dp: Dispatcher):
             except:
                 pass
             return
-        
         template = db.get_template(user_id)
         if not template or not template['text']:
             await callback.message.edit_text("❌ _Сначала создайте шаблон в разделе 📝 Шаблон_", parse_mode="Markdown", reply_markup=get_accounts_inline(len(sessions)))
@@ -497,7 +477,6 @@ def setup_handlers(dp: Dispatcher):
             except:
                 pass
             return
-        
         user = db.get_user(user_id)
         settings = {
             "delay": user['delay'] if user else 3,
@@ -506,7 +485,6 @@ def setup_handlers(dp: Dispatcher):
             "auto_delete_invalid": user['auto_delete_invalid'] if user else False
         }
         logger.info(f"Настройки рассылки: {settings}")
-
         broadcast_id = await broadcast_engine.start_broadcast(
             user_id=user_id,
             sessions=sessions,
@@ -514,15 +492,11 @@ def setup_handlers(dp: Dispatcher):
             settings=settings,
             bot=callback.bot
         )
-        
         user_broadcasts[user_id] = broadcast_id
         logger.info(f"Запущена рассылка {broadcast_id} для пользователя {user_id}")
-        
         await callback.message.delete()
         new_message = await callback.message.answer("🚀 _Рассылка запущена..._", parse_mode="Markdown")
-        
         asyncio.create_task(update_broadcast_status(new_message, broadcast_id))
-        
         try:
             await callback.answer()
         except:
@@ -533,9 +507,7 @@ def setup_handlers(dp: Dispatcher):
             progress = broadcast_engine.get_progress(broadcast_id)
             if not progress:
                 break
-            
             status = progress['status']
-            
             if status == "completed":
                 text = "📄 **Рассылка завершена**\n\n"
                 text += f"✅ Сообщений всего успешно: {progress['sent']}\n"
@@ -562,14 +534,13 @@ def setup_handlers(dp: Dispatcher):
                         pass
                     await message.answer(text, parse_mode="Markdown", reply_markup=get_accounts_inline(0))
                 break
-            
             if status == "stopped":
                 for uid, bid in list(user_broadcasts.items()):
                     if bid == broadcast_id:
                         del user_broadcasts[uid]
                         break
                 try:
-                    await message.edit_text("⏹ _Рассылка остановлена_", parse_mode="Markdown", reply_markup=get_accounts_inline(0))
+                    await message.edit_text(" _Рассылка остановлена_", parse_mode="Markdown", reply_markup=get_accounts_inline(0))
                 except Exception as e:
                     logger.warning(f"update_broadcast_status stopped edit error: {e}")
                     try:
@@ -578,7 +549,6 @@ def setup_handlers(dp: Dispatcher):
                         pass
                     await message.answer("⏹ _Рассылка остановлена_", parse_mode="Markdown", reply_markup=get_accounts_inline(0))
                 break
-            
             sessions_status = progress['sessions_status']
             stats = progress['stats']
             total_accounts = len(sessions_status)
@@ -586,10 +556,8 @@ def setup_handlers(dp: Dispatcher):
             waiting = stats['waiting']
             completed = stats['completed']
             error = stats['error']
-            
             text = f"🚀 **Рассылка на {total_accounts} аккаунтов**\n"
             text += f"🔄 Работают: {running}/{total_accounts} | 🕓 Ждут: {waiting} | ✅ Готовы: {completed} | ❌ Ошибки: {error}\n\n"
-            
             for s_id, s_data in sessions_status.items():
                 name = s_data.get('name', 'Неизвестно')
                 status_icon = "🔄" if s_data.get('status') == 'running' else ("🟢" if s_data.get('status') == 'completed' else ("🔴" if s_data.get('status') == 'error' else "🕓"))
@@ -601,17 +569,13 @@ def setup_handlers(dp: Dispatcher):
                     text += f"{status_icon} {name}: ✅{sent_ok} ❌{sent_fail} | контактов: {total_contacts} | ошибка: {error_msg}\n"
                 else:
                     text += f"{status_icon} {name}: ✅{sent_ok} ❌{sent_fail} | контактов: {total_contacts}\n"
-            
             text += f"\n📊 Итого: ✅{progress['sent']} ❌{progress['failed']}\n"
             text += f"\n_Обновление каждые 5 сек. ⏹️ Остановить — кнопка ниже_"
-            
             if len(text) > 4000:
                 text = text[:4000] + "\n\n_...текст обрезан из-за ограничений Telegram_"
-            
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="⏹️ Остановить рассылку", callback_data="stop_broadcast")]
             ])
-            
             try:
                 await message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
             except Exception as e:
@@ -624,10 +588,9 @@ def setup_handlers(dp: Dispatcher):
                     await message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
                 except Exception as e2:
                     logger.error(f"update_broadcast_status progress answer error: {e2}")
-            
             await asyncio.sleep(5)
 
-    @dp.callback_query_handler(lambda c: c.data == "stop_broadcast")
+    @dp.callback_query(F.data == "stop_broadcast")
     async def stop_broadcast(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         broadcast_id = user_broadcasts.get(user_id)
@@ -640,39 +603,35 @@ def setup_handlers(dp: Dispatcher):
             await callback.answer("Нет активной рассылки", show_alert=True)
 
     # ==================== ШАБЛОН ====================
-    @dp.message_handler(lambda m: m.text == "📝 Шаблон")
+    @dp.message(F.text == "📝 Шаблон")
     async def show_template_menu(message: types.Message):
         user_id = message.from_user.id
         template = db.get_template(user_id)
         logger.info(f"Пользователь {user_id} открыл шаблон")
-
         has_file = bool(template and template['file_path'])
         has_link = bool(template and template['link_url'])
         text_content = template['text'] if template and template['text'] else "Помнишь?"
-        
         file_name = "Нет"
         updated_time_str = ""
         if has_file:
             file_name = template['file_path']
             if template['updated_date']:
                 updated_time_str = f" — 🔁 последнее обновление в {template['updated_date']}"
-
         text = "❓ **Вы хотите изменить шаблон?**\n\n"
         text += f"📁 _Файл:_ {file_name}{updated_time_str}\n"
         text += f"🌐 _Прикреплённая ссылка:_ {'Есть' if has_link else 'Нету'}\n"
         text += f"\n📝 _Текущий текст шаблона:_\n\n{text_content}"
-
         await message.answer(
             text,
             parse_mode="Markdown",
             reply_markup=get_template_inline()
         )
 
-    @dp.callback_query_handler(lambda c: c.data == "add_file")
+    @dp.callback_query(F.data == "add_file")
     async def add_file(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил добавление файла в шаблон")
         await callback.message.edit_text(
-            "📎 **Добавление файла в шаблон**\n\n_Отправьте файл (фото/видео/документ/APK)._\n_Он будет прикрепляться к каждому сообщению._",
+            " **Добавление файла в шаблон**\n\n_Отправьте файл (фото/видео/документ/APK)._\n_Он будет прикрепляться к каждому сообщению._",
             parse_mode="Markdown"
         )
         try:
@@ -680,7 +639,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "edit_text")
+    @dp.callback_query(F.data == "edit_text")
     async def edit_text(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Пользователь {callback.from_user.id} запросил изменение текста шаблона")
         await callback.message.edit_text(
@@ -693,7 +652,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(state=TemplateStates.waiting_for_text)
+    @dp.message(StateFilter(TemplateStates.waiting_for_text))
     async def process_text(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         text = message.text
@@ -706,7 +665,7 @@ def setup_handlers(dp: Dispatcher):
         await state.clear()
         await message.answer("✅ _Текст шаблона сохранен!_", parse_mode="Markdown", reply_markup=get_template_inline())
 
-    @dp.callback_query_handler(lambda c: c.data == "keep_text")
+    @dp.callback_query(F.data == "keep_text")
     async def keep_text(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} оставил текст без изменений")
         await callback.message.edit_text("✅ _Текст оставлен без изменений_", parse_mode="Markdown", reply_markup=get_template_inline())
@@ -715,7 +674,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "add_link")
+    @dp.callback_query(F.data == "add_link")
     async def add_link(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Пользователь {callback.from_user.id} запросил добавление ссылки")
         await callback.message.edit_text(
@@ -728,7 +687,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(state=TemplateStates.waiting_for_link_url)
+    @dp.message(StateFilter(TemplateStates.waiting_for_link_url))
     async def process_link_url(message: types.Message, state: FSMContext):
         url = message.text.strip()
         await state.update_data(link_url=url)
@@ -738,24 +697,22 @@ def setup_handlers(dp: Dispatcher):
         )
         await state.set_state(TemplateStates.waiting_for_link_text)
 
-    @dp.message_handler(state=TemplateStates.waiting_for_link_text)
+    @dp.message(StateFilter(TemplateStates.waiting_for_link_text))
     async def process_link_text(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         link_text = message.text
         data = await state.get_data()
         link_url = data.get('link_url')
-
         template = db.get_template(user_id)
         if template:
             db.save_template(user_id, text=template['text'], file_path=template['file_path'], link_url=link_url, link_text=link_text)
         else:
             db.save_template(user_id, link_url=link_url, link_text=link_text)
-
         await state.clear()
         logger.info(f"Пользователь {user_id} добавил ссылку в шаблон")
         await message.answer("✅ _Ссылка добавлена в шаблон!_", parse_mode="Markdown", reply_markup=get_template_inline())
 
-    @dp.callback_query_handler(lambda c: c.data == "remove_link")
+    @dp.callback_query(F.data == "remove_link")
     async def remove_link(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         template = db.get_template(user_id)
@@ -770,7 +727,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "remove_file")
+    @dp.callback_query(F.data == "remove_file")
     async def remove_file(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         template = db.get_template(user_id)
@@ -789,7 +746,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== НАСТРОЙКИ ====================
-    @dp.message_handler(lambda m: m.text == "⚙️ Настройки")
+    @dp.message(F.text == "⚙️ Настройки")
     async def show_settings(message: types.Message):
         await show_settings_callback_from_message(message)
 
@@ -799,7 +756,6 @@ def setup_handlers(dp: Dispatcher):
         if not user:
             await message.answer("❌ _Ошибка_", parse_mode="Markdown", reply_markup=get_main_keyboard())
             return
-
         proxy_text = "🚫 Не назначен"
         if user['proxy_id']:
             proxies = db.get_proxies()
@@ -807,16 +763,14 @@ def setup_handlers(dp: Dispatcher):
                 if p['id'] == user['proxy_id']:
                     proxy_text = f"✅ {p['proxy_string'][:40]}..."
                     break
-
         text = (
             f"⚙️ **Настройки**\n\n"
             f"🔄 _Только взаимные_ - {'✅ ВКЛ' if user['only_mutual'] else '❌ ВЫКЛ'}\n"
             f"⏱ _Отложка_ - {user['delay']} сек\n"
-            f"🗑 _Удаление сообщений_ - {'✅ ВКЛ' if user['delete_after_send'] else '❌ ВЫКЛ'}\n"
+            f" _Удаление сообщений_ - {'✅ ВКЛ' if user['delete_after_send'] else '❌ ВЫКЛ'}\n"
             f"🔄 _Сброс сессий_ - {'✅ ВКЛ' if user['auto_delete_invalid'] else '❌ ВЫКЛ'}\n\n"
             f"🌐 _Прокси:_ {proxy_text}"
         )
-        
         await message.answer(
             text,
             parse_mode="Markdown",
@@ -829,7 +783,6 @@ def setup_handlers(dp: Dispatcher):
         if not user:
             await callback.message.edit_text("❌ _Ошибка_", parse_mode="Markdown")
             return
-
         proxy_text = "🚫 Не назначен"
         if user['proxy_id']:
             proxies = db.get_proxies()
@@ -837,23 +790,21 @@ def setup_handlers(dp: Dispatcher):
                 if p['id'] == user['proxy_id']:
                     proxy_text = f"✅ {p['proxy_string'][:40]}..."
                     break
-
         text = (
             f"⚙️ **Настройки**\n\n"
             f"🔄 _Только взаимные_ - {'✅ ВКЛ' if user['only_mutual'] else '❌ ВЫКЛ'}\n"
             f"⏱ _Отложка_ - {user['delay']} сек\n"
             f"🗑 _Удаление сообщений_ - {'✅ ВКЛ' if user['delete_after_send'] else '❌ ВЫКЛ'}\n"
             f"🔄 _Сброс сессий_ - {'✅ ВКЛ' if user['auto_delete_invalid'] else '❌ ВЫКЛ'}\n\n"
-            f"🌐 _Прокси:_ {proxy_text}"
+            f" _Прокси:_ {proxy_text}"
         )
-        
         await callback.message.edit_text(
             text,
             parse_mode="Markdown",
             reply_markup=get_settings_inline()
         )
 
-    @dp.callback_query_handler(lambda c: c.data == "toggle_mutual")
+    @dp.callback_query(F.data == "toggle_mutual")
     async def toggle_mutual(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         try:
@@ -870,7 +821,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в toggle_mutual: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query_handler(lambda c: c.data == "toggle_delete")
+    @dp.callback_query(F.data == "toggle_delete")
     async def toggle_delete(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         try:
@@ -887,7 +838,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в toggle_delete: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query_handler(lambda c: c.data == "toggle_reset")
+    @dp.callback_query(F.data == "toggle_reset")
     async def toggle_reset(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         try:
@@ -904,11 +855,11 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в toggle_reset: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query_handler(lambda c: c.data == "change_delay")
+    @dp.callback_query(F.data == "change_delay")
     async def change_delay(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Пользователь {callback.from_user.id} запросил изменение задержки")
         await callback.message.edit_text(
-            "⏱ **Введите новую задержку**\n\n_Число от 1 до 60 секунд._",
+            " **Введите новую задержку**\n\n_Число от 1 до 60 секунд._",
             parse_mode="Markdown"
         )
         await state.set_state(AdminStates.waiting_for_delay)
@@ -917,7 +868,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(state=AdminStates.waiting_for_delay)
+    @dp.message(StateFilter(AdminStates.waiting_for_delay))
     async def process_delay(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         try:
@@ -933,7 +884,7 @@ def setup_handlers(dp: Dispatcher):
             await message.answer("❌ _Введите число_", parse_mode="Markdown", reply_markup=get_main_keyboard())
         await state.clear()
 
-    @dp.callback_query_handler(lambda c: c.data == "select_proxy")
+    @dp.callback_query(F.data == "select_proxy")
     async def select_proxy(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил выбор прокси")
         keyboard = get_proxy_selection_inline()
@@ -950,7 +901,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data.startswith("set_proxy_"))
+    @dp.callback_query(F.data.startswith("set_proxy_"))
     async def set_proxy(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         proxy_id = int(callback.data.split("_")[2])
@@ -966,7 +917,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в set_proxy: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query_handler(lambda c: c.data == "add_my_proxy")
+    @dp.callback_query(F.data == "add_my_proxy")
     async def add_my_proxy(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил добавление своего прокси")
         await callback.message.edit_text(
@@ -978,14 +929,12 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(lambda m: m.text and ('socks5://' in m.text or 'http://' in m.text))
+    @dp.message(lambda m: m.text and ('socks5://' in m.text or 'http://' in m.text))
     async def process_my_proxy(message: types.Message):
         user_id = message.from_user.id
         proxy_string = message.text.strip()
         logger.info(f"Пользователь {user_id} отправляет прокси: {proxy_string[:30]}...")
-        
         is_work, msg = await test_proxy(proxy_string)
-        
         if is_work:
             proxy_type, _ = proxy_string.split('://')
             db.add_proxy(proxy_string, proxy_type, user_id)
@@ -995,24 +944,24 @@ def setup_handlers(dp: Dispatcher):
             logger.warning(f"Пользователь {user_id} добавил нерабочий прокси: {msg}")
             await message.answer(f"❌ _Прокси не работает:_\n{msg}", parse_mode="Markdown", reply_markup=get_main_keyboard())
 
-    @dp.callback_query_handler(lambda c: c.data == "remove_my_proxy")
+    @dp.callback_query(F.data == "remove_my_proxy")
     async def remove_my_proxy(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил удаление своего прокси")
         keyboard = get_proxy_delete_inline()
         if not keyboard:
-            await callback.message.edit_text("❌ _Нет прокси для удаления_", parse_mode="Markdown", reply_markup=get_main_keyboard())
+            await callback.message.edit_text(" _Нет прокси для удаления_", parse_mode="Markdown", reply_markup=get_main_keyboard())
             try:
                 await callback.answer()
             except:
                 pass
             return
-        await callback.message.edit_text("🗑 **Выберите прокси для удаления:**", parse_mode="Markdown", reply_markup=keyboard)
+        await callback.message.edit_text(" **Выберите прокси для удаления:**", parse_mode="Markdown", reply_markup=keyboard)
         try:
             await callback.answer()
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data.startswith("del_proxy_"))
+    @dp.callback_query(F.data.startswith("del_proxy_"))
     async def delete_selected_proxy(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         proxy_id = int(callback.data.split("_")[2])
@@ -1029,7 +978,7 @@ def setup_handlers(dp: Dispatcher):
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
     # ==================== ПРОВЕРКА ПРОКСИ ====================
-    @dp.callback_query_handler(lambda c: c.data == "test_proxies")
+    @dp.callback_query(F.data == "test_proxies")
     async def test_proxies(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} проверяет прокси")
         proxies = db.get_proxies()
@@ -1040,9 +989,7 @@ def setup_handlers(dp: Dispatcher):
             except:
                 pass
             return
-        
         await callback.message.edit_text("🔍 _Проверка прокси..._\n\n_⏳ Пожалуйста, подождите..._", parse_mode="Markdown")
-        
         results = []
         for proxy in proxies:
             result = await test_proxy_with_ping(proxy['proxy_string'])
@@ -1054,7 +1001,6 @@ def setup_handlers(dp: Dispatcher):
                 "ping": result['ping'],
                 "is_work": result['is_work']
             })
-        
         text = "🔍 **Результат проверки прокси:**\n\n"
         for r in results:
             text += f"{r['status']}\n"
@@ -1063,10 +1009,8 @@ def setup_handlers(dp: Dispatcher):
             proxy_short = r['string'][:50] + "..." if len(r['string']) > 50 else r['string']
             text += f"✅ {proxy_short}\n\n"
             text += "─" * 20 + "\n\n"
-        
         if len(text) > 4000:
             text = text[:3900] + "\n\n_...текст обрезан из-за ограничений Telegram_"
-        
         await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=get_settings_inline())
         try:
             await callback.answer()
@@ -1074,14 +1018,13 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== АДМИН-ПАНЕЛЬ ====================
-    @dp.message_handler(lambda m: m.text == "🔐 Админ-панель")
+    @dp.message(F.text == "🔐 Админ-панель")
     async def show_admin(message: types.Message):
         user_id = message.from_user.id
         if user_id not in ADMIN_IDS:
             logger.warning(f"Пользователь {user_id} попытался зайти в админ-панель без прав")
             await message.answer("⛔ _Доступ запрещен_", parse_mode="Markdown", reply_markup=get_main_keyboard())
             return
-
         stats = db.get_total_stats()
         text = (
             f"🔐 **АДМИН-ПАНЕЛЬ**\n\n"
@@ -1091,8 +1034,8 @@ def setup_handlers(dp: Dispatcher):
             f"📨 _Рассылок выполнено:_ {stats['total_broadcasts']}\n"
             f"📩 _Сообщений отправлено:_ {stats['total_success']}\n"
             f"❌ _Ошибок доставки:_ {stats['total_failed']}\n"
-            f"📱 _Аккаунтов подключено:_ {stats['total_sessions']}\n"
-            f"🌐 _Прокси в базе:_ {stats['total_proxies']}"
+            f" _Аккаунтов подключено:_ {stats['total_sessions']}\n"
+            f" _Прокси в базе:_ {stats['total_proxies']}"
         )
         await message.answer(
             text,
@@ -1100,7 +1043,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_admin_inline()
         )
 
-    @dp.callback_query_handler(lambda c: c.data == "admin_users")
+    @dp.callback_query(F.data == "admin_users")
     async def admin_users(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1108,7 +1051,7 @@ def setup_handlers(dp: Dispatcher):
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="➕ Выдать доступ", callback_data="give_access")],
             [InlineKeyboardButton(text="➖ Забрать доступ", callback_data="remove_access")],
-            [InlineKeyboardButton(text="📋 Список пользователей", callback_data="list_users")],
+            [InlineKeyboardButton(text=" Список пользователей", callback_data="list_users")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin")]
         ])
         await callback.message.edit_text("👥 **УПРАВЛЕНИЕ ДОСТУПОМ**\n\n_Выберите действие:_", parse_mode="Markdown", reply_markup=keyboard)
@@ -1117,7 +1060,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "back_admin")
+    @dp.callback_query(F.data == "back_admin")
     async def back_admin(callback: types.CallbackQuery):
         await callback.message.delete()
         await show_admin(callback.message)
@@ -1126,7 +1069,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "give_access")
+    @dp.callback_query(F.data == "give_access")
     async def give_access(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1141,7 +1084,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "remove_access")
+    @dp.callback_query(F.data == "remove_access")
     async def remove_access(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1156,7 +1099,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(state=AdminStates.waiting_for_user_id)
+    @dp.message(StateFilter(AdminStates.waiting_for_user_id))
     async def process_access(message: types.Message, state: FSMContext):
         try:
             target_id = int(message.text.strip())
@@ -1178,7 +1121,7 @@ def setup_handlers(dp: Dispatcher):
             await message.answer("❌ _Неверный ID. Отправьте число._", parse_mode="Markdown", reply_markup=get_admin_inline())
         await state.clear()
 
-    @dp.callback_query_handler(lambda c: c.data == "list_users")
+    @dp.callback_query(F.data == "list_users")
     async def list_users(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1205,10 +1148,10 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "admin_proxies")
+    @dp.callback_query(F.data == "admin_proxies")
     async def admin_proxies(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
-            await callback.answer("⛔ Доступ запрещен", show_alert=True)
+            await callback.answer(" Доступ запрещен", show_alert=True)
             return
         proxies = db.get_proxies()
         text = "🌐 **УПРАВЛЕНИЕ ПРОКСИ**\n\n"
@@ -1222,7 +1165,7 @@ def setup_handlers(dp: Dispatcher):
             text += "_Нет прокси в базе_"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="➕ Добавить прокси", callback_data="add_admin_proxy")],
-            [InlineKeyboardButton(text="🗑 Удалить прокси", callback_data="del_admin_proxy")],
+            [InlineKeyboardButton(text=" Удалить прокси", callback_data="del_admin_proxy")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin")]
         ])
         await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
@@ -1231,7 +1174,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data == "add_admin_proxy")
+    @dp.callback_query(F.data == "add_admin_proxy")
     async def add_admin_proxy(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1246,7 +1189,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message_handler(state=AdminStates.waiting_for_proxy_string)
+    @dp.message(StateFilter(AdminStates.waiting_for_proxy_string))
     async def process_admin_add_proxy(message: types.Message, state: FSMContext):
         if message.from_user.id not in ADMIN_IDS:
             await message.answer("⛔ Доступ запрещен", reply_markup=get_main_keyboard())
@@ -1259,10 +1202,10 @@ def setup_handlers(dp: Dispatcher):
             logger.info(f"Админ {message.from_user.id} добавил прокси {proxy_string[:30]}...")
             await message.answer("✅ _Прокси добавлен в базу!_", parse_mode="Markdown", reply_markup=get_admin_inline())
         else:
-            await message.answer("❌ _Неверный формат прокси_", parse_mode="Markdown", reply_markup=get_admin_inline())
+            await message.answer(" _Неверный формат прокси_", parse_mode="Markdown", reply_markup=get_admin_inline())
         await state.clear()
 
-    @dp.callback_query_handler(lambda c: c.data == "del_admin_proxy")
+    @dp.callback_query(F.data == "del_admin_proxy")
     async def del_admin_proxy(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1281,7 +1224,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query_handler(lambda c: c.data.startswith("del_admin_proxy_"))
+    @dp.callback_query(F.data.startswith("del_admin_proxy_"))
     async def delete_admin_proxy(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
