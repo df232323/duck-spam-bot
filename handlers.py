@@ -3,7 +3,6 @@ import asyncio
 import logging
 from aiogram import types, Dispatcher
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import database as db
@@ -140,7 +139,7 @@ def get_admin_proxy_delete_inline():
 def setup_handlers(dp: Dispatcher):
 
     # ==================== СТАРТ ====================
-    @dp.message(Command("start"))
+    @dp.message_handler(commands=['start'])
     async def cmd_start(message: types.Message):
         user = message.from_user
         db.create_user(user.id, user.username, user.first_name)
@@ -152,7 +151,7 @@ def setup_handlers(dp: Dispatcher):
         )
 
     # ==================== НАЗАД ====================
-    @dp.callback_query(lambda c: c.data == "back_to_main")
+    @dp.callback_query_handler(lambda c: c.data == "back_to_main")
     async def back_to_main(callback: types.CallbackQuery):
         await callback.message.delete()
         await callback.message.answer(
@@ -165,7 +164,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "back_settings")
+    @dp.callback_query_handler(lambda c: c.data == "back_settings")
     async def back_settings(callback: types.CallbackQuery):
         await callback.message.delete()
         await show_settings_callback(callback)
@@ -175,7 +174,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== ПРОФИЛЬ ====================
-    @dp.message(lambda m: m.text == "👤 Профиль")
+    @dp.message_handler(lambda m: m.text == "👤 Профиль")
     async def show_profile(message: types.Message):
         user_id = message.from_user.id
         user = db.get_user(user_id)
@@ -200,7 +199,7 @@ def setup_handlers(dp: Dispatcher):
         await message.answer(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
     # ==================== АККАУНТЫ ====================
-    @dp.message(lambda m: m.text == "📱 Загрузить аккаунты")
+    @dp.message_handler(lambda m: m.text == "📱 Загрузить аккаунты")
     async def show_accounts_menu(message: types.Message):
         user_id = message.from_user.id
         sessions = db.get_sessions(user_id)
@@ -218,7 +217,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_accounts_inline(len(sessions))
         )
 
-    @dp.callback_query(lambda c: c.data == "add_session")
+    @dp.callback_query_handler(lambda c: c.data == "add_session")
     async def add_session(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил загрузку .session")
         await callback.message.edit_text(
@@ -230,7 +229,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(lambda message: message.document)
+    @dp.message_handler(content_types=['document'])
     async def handle_document(message: types.Message):
         user_id = message.from_user.id
         doc = message.document
@@ -340,7 +339,7 @@ def setup_handlers(dp: Dispatcher):
         await message.answer("❌ _Неподдерживаемый формат_", parse_mode="Markdown", reply_markup=get_main_keyboard())
 
     # ==================== ПРОВЕРКА АККАУНТОВ ====================
-    @dp.callback_query(lambda c: c.data == "check_sessions")
+    @dp.callback_query_handler(lambda c: c.data == "check_sessions")
     async def check_sessions(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         logger.info(f"Пользователь {user_id} начал проверку аккаунтов")
@@ -390,7 +389,7 @@ def setup_handlers(dp: Dispatcher):
         await callback.message.edit_text(text, reply_markup=get_accounts_inline(len(sessions)))
 
     # ==================== УДАЛЕНИЕ ====================
-    @dp.callback_query(lambda c: c.data == "delete_invalid")
+    @dp.callback_query_handler(lambda c: c.data == "delete_invalid")
     async def delete_invalid(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         sessions = db.get_sessions(user_id)
@@ -418,7 +417,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "delete_all")
+    @dp.callback_query_handler(lambda c: c.data == "delete_all")
     async def delete_all_sessions(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         sessions = db.get_sessions(user_id)
@@ -451,7 +450,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== СПИСОК АККАУНТОВ ====================
-    @dp.callback_query(lambda c: c.data == "list_sessions")
+    @dp.callback_query_handler(lambda c: c.data == "list_sessions")
     async def list_sessions(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         sessions = db.get_sessions(user_id)
@@ -476,7 +475,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== РАССЫЛКА ====================
-    @dp.callback_query(lambda c: c.data == "start_broadcast")
+    @dp.callback_query_handler(lambda c: c.data == "start_broadcast")
     async def start_broadcast(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         logger.info(f"Пользователь {user_id} запускает рассылку")
@@ -628,7 +627,7 @@ def setup_handlers(dp: Dispatcher):
             
             await asyncio.sleep(5)
 
-    @dp.callback_query(lambda c: c.data == "stop_broadcast")
+    @dp.callback_query_handler(lambda c: c.data == "stop_broadcast")
     async def stop_broadcast(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         broadcast_id = user_broadcasts.get(user_id)
@@ -641,7 +640,7 @@ def setup_handlers(dp: Dispatcher):
             await callback.answer("Нет активной рассылки", show_alert=True)
 
     # ==================== ШАБЛОН ====================
-    @dp.message(lambda m: m.text == "📝 Шаблон")
+    @dp.message_handler(lambda m: m.text == "📝 Шаблон")
     async def show_template_menu(message: types.Message):
         user_id = message.from_user.id
         template = db.get_template(user_id)
@@ -669,7 +668,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_template_inline()
         )
 
-    @dp.callback_query(lambda c: c.data == "add_file")
+    @dp.callback_query_handler(lambda c: c.data == "add_file")
     async def add_file(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил добавление файла в шаблон")
         await callback.message.edit_text(
@@ -681,7 +680,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "edit_text")
+    @dp.callback_query_handler(lambda c: c.data == "edit_text")
     async def edit_text(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Пользователь {callback.from_user.id} запросил изменение текста шаблона")
         await callback.message.edit_text(
@@ -694,7 +693,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(TemplateStates.waiting_for_text)
+    @dp.message_handler(state=TemplateStates.waiting_for_text)
     async def process_text(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         text = message.text
@@ -707,7 +706,7 @@ def setup_handlers(dp: Dispatcher):
         await state.clear()
         await message.answer("✅ _Текст шаблона сохранен!_", parse_mode="Markdown", reply_markup=get_template_inline())
 
-    @dp.callback_query(lambda c: c.data == "keep_text")
+    @dp.callback_query_handler(lambda c: c.data == "keep_text")
     async def keep_text(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} оставил текст без изменений")
         await callback.message.edit_text("✅ _Текст оставлен без изменений_", parse_mode="Markdown", reply_markup=get_template_inline())
@@ -716,7 +715,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "add_link")
+    @dp.callback_query_handler(lambda c: c.data == "add_link")
     async def add_link(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Пользователь {callback.from_user.id} запросил добавление ссылки")
         await callback.message.edit_text(
@@ -729,7 +728,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(TemplateStates.waiting_for_link_url)
+    @dp.message_handler(state=TemplateStates.waiting_for_link_url)
     async def process_link_url(message: types.Message, state: FSMContext):
         url = message.text.strip()
         await state.update_data(link_url=url)
@@ -739,7 +738,7 @@ def setup_handlers(dp: Dispatcher):
         )
         await state.set_state(TemplateStates.waiting_for_link_text)
 
-    @dp.message(TemplateStates.waiting_for_link_text)
+    @dp.message_handler(state=TemplateStates.waiting_for_link_text)
     async def process_link_text(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         link_text = message.text
@@ -756,7 +755,7 @@ def setup_handlers(dp: Dispatcher):
         logger.info(f"Пользователь {user_id} добавил ссылку в шаблон")
         await message.answer("✅ _Ссылка добавлена в шаблон!_", parse_mode="Markdown", reply_markup=get_template_inline())
 
-    @dp.callback_query(lambda c: c.data == "remove_link")
+    @dp.callback_query_handler(lambda c: c.data == "remove_link")
     async def remove_link(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         template = db.get_template(user_id)
@@ -771,7 +770,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "remove_file")
+    @dp.callback_query_handler(lambda c: c.data == "remove_file")
     async def remove_file(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         template = db.get_template(user_id)
@@ -790,7 +789,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== НАСТРОЙКИ ====================
-    @dp.message(lambda m: m.text == "⚙️ Настройки")
+    @dp.message_handler(lambda m: m.text == "⚙️ Настройки")
     async def show_settings(message: types.Message):
         await show_settings_callback_from_message(message)
 
@@ -854,7 +853,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_settings_inline()
         )
 
-    @dp.callback_query(lambda c: c.data == "toggle_mutual")
+    @dp.callback_query_handler(lambda c: c.data == "toggle_mutual")
     async def toggle_mutual(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         try:
@@ -871,7 +870,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в toggle_mutual: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query(lambda c: c.data == "toggle_delete")
+    @dp.callback_query_handler(lambda c: c.data == "toggle_delete")
     async def toggle_delete(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         try:
@@ -888,7 +887,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в toggle_delete: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query(lambda c: c.data == "toggle_reset")
+    @dp.callback_query_handler(lambda c: c.data == "toggle_reset")
     async def toggle_reset(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         try:
@@ -905,7 +904,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в toggle_reset: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query(lambda c: c.data == "change_delay")
+    @dp.callback_query_handler(lambda c: c.data == "change_delay")
     async def change_delay(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Пользователь {callback.from_user.id} запросил изменение задержки")
         await callback.message.edit_text(
@@ -918,7 +917,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(AdminStates.waiting_for_delay)
+    @dp.message_handler(state=AdminStates.waiting_for_delay)
     async def process_delay(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         try:
@@ -934,7 +933,7 @@ def setup_handlers(dp: Dispatcher):
             await message.answer("❌ _Введите число_", parse_mode="Markdown", reply_markup=get_main_keyboard())
         await state.clear()
 
-    @dp.callback_query(lambda c: c.data == "select_proxy")
+    @dp.callback_query_handler(lambda c: c.data == "select_proxy")
     async def select_proxy(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил выбор прокси")
         keyboard = get_proxy_selection_inline()
@@ -951,7 +950,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data.startswith("set_proxy_"))
+    @dp.callback_query_handler(lambda c: c.data.startswith("set_proxy_"))
     async def set_proxy(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         proxy_id = int(callback.data.split("_")[2])
@@ -967,7 +966,7 @@ def setup_handlers(dp: Dispatcher):
             logger.error(f"Ошибка в set_proxy: {e}")
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
-    @dp.callback_query(lambda c: c.data == "add_my_proxy")
+    @dp.callback_query_handler(lambda c: c.data == "add_my_proxy")
     async def add_my_proxy(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил добавление своего прокси")
         await callback.message.edit_text(
@@ -979,13 +978,12 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(lambda m: m.text and ('socks5://' in m.text or 'http://' in m.text))
+    @dp.message_handler(lambda m: m.text and ('socks5://' in m.text or 'http://' in m.text))
     async def process_my_proxy(message: types.Message):
         user_id = message.from_user.id
         proxy_string = message.text.strip()
         logger.info(f"Пользователь {user_id} отправляет прокси: {proxy_string[:30]}...")
         
-        # Используем простую проверку
         is_work, msg = await test_proxy(proxy_string)
         
         if is_work:
@@ -997,7 +995,7 @@ def setup_handlers(dp: Dispatcher):
             logger.warning(f"Пользователь {user_id} добавил нерабочий прокси: {msg}")
             await message.answer(f"❌ _Прокси не работает:_\n{msg}", parse_mode="Markdown", reply_markup=get_main_keyboard())
 
-    @dp.callback_query(lambda c: c.data == "remove_my_proxy")
+    @dp.callback_query_handler(lambda c: c.data == "remove_my_proxy")
     async def remove_my_proxy(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} запросил удаление своего прокси")
         keyboard = get_proxy_delete_inline()
@@ -1014,7 +1012,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data.startswith("del_proxy_"))
+    @dp.callback_query_handler(lambda c: c.data.startswith("del_proxy_"))
     async def delete_selected_proxy(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         proxy_id = int(callback.data.split("_")[2])
@@ -1031,7 +1029,7 @@ def setup_handlers(dp: Dispatcher):
             await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
     # ==================== ПРОВЕРКА ПРОКСИ ====================
-    @dp.callback_query(lambda c: c.data == "test_proxies")
+    @dp.callback_query_handler(lambda c: c.data == "test_proxies")
     async def test_proxies(callback: types.CallbackQuery):
         logger.info(f"Пользователь {callback.from_user.id} проверяет прокси")
         proxies = db.get_proxies()
@@ -1076,7 +1074,7 @@ def setup_handlers(dp: Dispatcher):
             pass
 
     # ==================== АДМИН-ПАНЕЛЬ ====================
-    @dp.message(lambda m: m.text == "🔐 Админ-панель")
+    @dp.message_handler(lambda m: m.text == "🔐 Админ-панель")
     async def show_admin(message: types.Message):
         user_id = message.from_user.id
         if user_id not in ADMIN_IDS:
@@ -1102,7 +1100,7 @@ def setup_handlers(dp: Dispatcher):
             reply_markup=get_admin_inline()
         )
 
-    @dp.callback_query(lambda c: c.data == "admin_users")
+    @dp.callback_query_handler(lambda c: c.data == "admin_users")
     async def admin_users(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1119,7 +1117,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "back_admin")
+    @dp.callback_query_handler(lambda c: c.data == "back_admin")
     async def back_admin(callback: types.CallbackQuery):
         await callback.message.delete()
         await show_admin(callback.message)
@@ -1128,7 +1126,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "give_access")
+    @dp.callback_query_handler(lambda c: c.data == "give_access")
     async def give_access(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1143,7 +1141,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "remove_access")
+    @dp.callback_query_handler(lambda c: c.data == "remove_access")
     async def remove_access(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1158,7 +1156,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(AdminStates.waiting_for_user_id)
+    @dp.message_handler(state=AdminStates.waiting_for_user_id)
     async def process_access(message: types.Message, state: FSMContext):
         try:
             target_id = int(message.text.strip())
@@ -1180,7 +1178,7 @@ def setup_handlers(dp: Dispatcher):
             await message.answer("❌ _Неверный ID. Отправьте число._", parse_mode="Markdown", reply_markup=get_admin_inline())
         await state.clear()
 
-    @dp.callback_query(lambda c: c.data == "list_users")
+    @dp.callback_query_handler(lambda c: c.data == "list_users")
     async def list_users(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1207,7 +1205,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "admin_proxies")
+    @dp.callback_query_handler(lambda c: c.data == "admin_proxies")
     async def admin_proxies(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1233,7 +1231,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data == "add_admin_proxy")
+    @dp.callback_query_handler(lambda c: c.data == "add_admin_proxy")
     async def add_admin_proxy(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1248,7 +1246,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.message(AdminStates.waiting_for_proxy_string)
+    @dp.message_handler(state=AdminStates.waiting_for_proxy_string)
     async def process_admin_add_proxy(message: types.Message, state: FSMContext):
         if message.from_user.id not in ADMIN_IDS:
             await message.answer("⛔ Доступ запрещен", reply_markup=get_main_keyboard())
@@ -1264,7 +1262,7 @@ def setup_handlers(dp: Dispatcher):
             await message.answer("❌ _Неверный формат прокси_", parse_mode="Markdown", reply_markup=get_admin_inline())
         await state.clear()
 
-    @dp.callback_query(lambda c: c.data == "del_admin_proxy")
+    @dp.callback_query_handler(lambda c: c.data == "del_admin_proxy")
     async def del_admin_proxy(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1283,7 +1281,7 @@ def setup_handlers(dp: Dispatcher):
         except:
             pass
 
-    @dp.callback_query(lambda c: c.data.startswith("del_admin_proxy_"))
+    @dp.callback_query_handler(lambda c: c.data.startswith("del_admin_proxy_"))
     async def delete_admin_proxy(callback: types.CallbackQuery):
         if callback.from_user.id not in ADMIN_IDS:
             await callback.answer("⛔ Доступ запрещен", show_alert=True)
